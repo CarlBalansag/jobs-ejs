@@ -3,11 +3,25 @@ require("express-async-errors");
 require("dotenv").config();
 const session = require("express-session");
 const MongoDBStore = require("connect-mongodb-session")(session);
+const cookieParser = require("cookie-parser");
+const csrf = require("host-csrf");
+const helmet = require("helmet");
+const xss = require("xss-clean");
+const rateLimit = require("express-rate-limit");
 
 const app = express();
 
 app.set("view engine", "ejs");
 app.use(require("body-parser").urlencoded({ extended: true }));
+app.use(cookieParser(process.env.SESSION_SECRET));
+app.use(helmet());
+app.use(xss());
+app.use(
+  rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+  })
+);
 
 const url = process.env.MONGO_URI;
 
@@ -42,6 +56,9 @@ passportInit();
 app.use(passport.initialize());
 app.use(passport.session());
 
+const csrfMiddleware = csrf.csrf();
+app.use(csrfMiddleware);
+
 app.use(require("./middleware/storeLocals"));
 app.get("/", (req, res) => {
   res.render("index");
@@ -51,6 +68,9 @@ app.use("/sessions", require("./routes/sessionRoutes"));
 const secretWordRouter = require("./routes/secretWord");
 const auth = require("./middleware/auth");
 app.use("/secretWord", auth, secretWordRouter);
+
+const jobsRouter = require("./routes/jobs");
+app.use("/jobs", auth, jobsRouter);
 
 app.use((req, res) => {
   res.status(404).send(`That page (${req.url}) was not found.`);
